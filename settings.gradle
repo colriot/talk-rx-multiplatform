@@ -1,0 +1,6 @@
+rootProject.name = 'rx-multiplatform'
+
+include ":android-app"
+include ":mpp-lib"
+
+enableFeaturePreview('GRADLE_METADATA')

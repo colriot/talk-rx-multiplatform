@@ -1,0 +1,73 @@
+plugins {
+    id 'org.jetbrains.kotlin.multiplatform'
+}
+
+kotlin {
+    jvm("android")
+    // This is for iPhone emulator
+    // Switch here to iosArm64 (or iosArm32) to build library for iPhone device
+    iosX64("ios") {
+        binaries {
+            framework()
+        }
+    }
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation kotlin('stdlib-common')
+                implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core-common:' + coroutines_version
+            }
+        }
+        androidMain {
+            dependencies {
+                implementation kotlin('stdlib')
+                implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:' + coroutines_version
+                implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:' + coroutines_version
+            }
+        }
+        iosMain {
+            dependencies {
+                implementation kotlin('stdlib')
+                implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core-native:' + coroutines_version
+            }
+        }
+    }
+}
+
+task iosTest {
+    def device = project.findProperty("iosDevice")?.toString() ?: "iPhone 8"
+    dependsOn kotlin.targets.ios.binaries.getTest('DEBUG').linkTaskName
+    group = JavaBasePlugin.VERIFICATION_GROUP
+    description = "Runs tests for target 'ios' on an iOS simulator"
+
+    doLast {
+        def binary = kotlin.targets.ios.binaries.getTest('DEBUG').outputFile
+        exec {
+            commandLine 'xcrun', 'simctl', 'spawn', device, binary.absolutePath
+        }
+    }
+}
+
+task packForXcode(type: Sync) {
+    group = "build"
+
+    //selecting the right configuration for the iOS framework depending on the Xcode environment variables
+    def mode = System.getenv("CONFIGURATION") ?: "DEBUG"
+    def framework = kotlin.targets.ios.binaries.getFramework(mode)
+
+    inputs.property("mode", mode)
+    dependsOn(framework.linkTask)
+
+    def targetDir = new File(buildDir, "xcode-frameworks")
+    from framework.outputDirectory
+    into targetDir
+
+    doLast {
+        def gradlew = new File(targetDir, "gradlew")
+        gradlew.write("#!/bin/bash\nexport 'JAVA_HOME=${System.getProperty("java.home")}'\ncd '${rootProject.rootDir}'\n./gradlew \$@\n")
+        gradlew.setExecutable(true)
+    }
+}
+
+tasks.getByName("build").dependsOn(packForXcode)
